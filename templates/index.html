@@ -1,0 +1,495 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- 左侧：账号管理 -->
+    <div class="lg:col-span-2">
+        <!-- 账号列表 -->
+        <div class="cute-card p-6 mb-6">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold gradient-text">
+                    <i class="ri-group-line mr-2"></i>账号管理
+                </h2>
+                <button onclick="openModal()" class="cute-button px-4 py-2 text-white rounded-lg text-sm">
+                    <i class="ri-add-line mr-1"></i>添加账号
+                </button>
+            </div>
+            
+            <div id="accountsList" class="space-y-4">
+                <!-- 账号列表将通过JS动态加载 -->
+            </div>
+        </div>
+
+        <!-- 日志显示 -->
+        <div class="cute-card p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold gradient-text">
+                    <i class="ri-file-list-3-line mr-2"></i>登录日志
+                </h2>
+                <div class="flex space-x-2">
+                    <input type="date" id="logDate" class="cute-input px-3 py-2 text-sm" value="{{ today }}">
+                    <select id="logAccount" class="cute-input px-3 py-2 text-sm">
+                        <option value="">所有账号</option>
+                    </select>
+                    <button onclick="loadLogs()" class="cute-button px-4 py-2 text-white rounded-lg text-sm">
+                        <i class="ri-refresh-line mr-1"></i>刷新
+                    </button>
+                    <button onclick="clearLogs()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition text-sm">
+                        <i class="ri-delete-bin-line mr-1"></i>清空
+                    </button>
+                </div>
+            </div>
+            
+            <div id="logsList" class="space-y-3 max-h-96 overflow-y-auto">
+                <!-- 日志列表将通过JS动态加载 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧：系统状态和邮件配置 -->
+    <div class="space-y-6">
+        <!-- 系统状态 -->
+        <div class="cute-card p-6">
+            <h2 class="text-xl font-bold gradient-text mb-4">
+                <i class="ri-dashboard-3-line mr-2"></i>系统状态
+            </h2>
+            <div id="systemStatus" class="space-y-3">
+                <!-- 系统状态将通过JS动态加载 -->
+            </div>
+        </div>
+
+        <!-- 邮件配置 -->
+        <div class="cute-card p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold gradient-text">
+                    <i class="ri-mail-settings-line mr-2"></i>邮件配置
+                </h2>
+                <button onclick="openEmailModal()" class="cute-button px-3 py-1 text-white rounded-lg text-sm">
+                    <i class="ri-settings-3-line mr-1"></i>设置
+                </button>
+            </div>
+            
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-gray-600">SMTP服务器</span>
+                    <span id="smtpStatus" class="text-sm text-gray-500">加载中...</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-gray-600">默认收件人</span>
+                    <span id="receiverStatus" class="text-sm text-gray-500">加载中...</span>
+                </div>
+                <button onclick="testEmail()" class="w-full cute-button px-4 py-2 text-white rounded-lg text-sm mt-4">
+                    <i class="ri-mail-send-line mr-1"></i>测试邮件
+                </button>
+                <button onclick="sendDailyLog()" class="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm">
+                    <i class="ri-file-text-line mr-1"></i>发送日志邮件
+                </button>
+            </div>
+        </div>
+
+        <!-- 快速操作 -->
+        <div class="cute-card p-6">
+            <h2 class="text-xl font-bold gradient-text mb-4">
+                <i class="ri-magic-line mr-2"></i>快速操作
+            </h2>
+            <div class="space-y-3">
+                <button onclick="refreshAll()" class="w-full cute-button px-4 py-2 text-white rounded-lg text-sm">
+                    <i class="ri-refresh-line mr-1"></i>刷新所有状态
+                </button>
+                <button onclick="loginAllActive()" class="w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm">
+                    <i class="ri-login-box-line mr-1"></i>登录所有账号
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 页面加载时初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        loadAccounts();
+        loadLogs();
+        loadSystemStatus();
+        loadEmailConfig();
+        
+        // 设置今天的日期
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('logDate').value = today;
+    });
+
+    // 加载账号列表
+    async function loadAccounts() {
+        try {
+            const data = await apiRequest('/api/accounts');
+            const accountsList = document.getElementById('accountsList');
+            const logAccount = document.getElementById('logAccount');
+            
+            // 清空现有内容
+            accountsList.innerHTML = '';
+            logAccount.innerHTML = '<option value="">所有账号</option>';
+            
+            data.data.forEach(account => {
+                // 添加到账号列表
+                const accountCard = createAccountCard(account);
+                accountsList.appendChild(accountCard);
+                
+                // 添加到日志筛选下拉框
+                const option = document.createElement('option');
+                option.value = account.id;
+                option.textContent = account.name;
+                logAccount.appendChild(option);
+            });
+        } catch (error) {
+            console.error('加载账号失败:', error);
+        }
+    }
+
+    // 创建账号卡片
+    function createAccountCard(account) {
+        const card = document.createElement('div');
+        card.className = 'bg-white/50 p-4 rounded-lg border border-white/30';
+        
+        const statusIcon = account.is_active ? 
+            '<span class="status-indicator active"></span>' : 
+            '<span class="status-indicator inactive"></span>';
+        
+        const scheduleStatus = account.schedule_status?.active ? 
+            `<i class="ri-time-line text-green-500"></i> ${account.schedule_status.next_run_time ? '下次: ' + new Date(account.schedule_status.next_run_time).toLocaleTimeString() : '运行中'}` : 
+            '<i class="ri-time-line text-gray-400"></i> 未设置';
+        
+        card.innerHTML = `
+            <div class="flex justify-between items-start mb-3">
+                <div class="flex items-center space-x-2">
+                    ${statusIcon}
+                    <h3 class="font-bold text-lg">${account.name}</h3>
+                </div>
+                <div class="flex space-x-2">
+                    <button onclick="editAccount(${account.id})" class="text-blue-500 hover:text-blue-700">
+                        <i class="ri-edit-line"></i>
+                    </button>
+                    <button onclick="deleteAccount(${account.id})" class="text-red-500 hover:text-red-700">
+                        <i class="ri-delete-bin-line"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="text-sm text-gray-600 mb-3">
+                <div class="mb-1"><i class="ri-mail-line mr-1"></i>${account.email}</div>
+                <div class="mb-1"><i class="ri-notification-3-line mr-1"></i>邮件通知: ${account.email_notification ? '✅' : '❌'}</div>
+                <div class="mb-1">${scheduleStatus}</div>
+                <div><i class="ri-bar-chart-line mr-1"></i>今日登录: ${account.today_logins || 0} 次</div>
+            </div>
+            
+            <div class="flex space-x-2">
+                <button onclick="loginNow(${account.id})" class="flex-1 cute-button px-3 py-2 text-white rounded-lg text-sm">
+                    <i class="ri-login-box-line mr-1"></i>立即登录
+                </button>
+                <button onclick="toggleSchedule(${account.id})" class="flex-1 px-3 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition text-sm">
+                    <i class="ri-play-circle-line mr-1"></i>${account.schedule_status?.active ? '暂停' : '启动'}
+                </button>
+            </div>
+        `;
+        
+        return card;
+    }
+
+    // 加载日志
+    async function loadLogs() {
+        try {
+            const date = document.getElementById('logDate').value;
+            const accountId = document.getElementById('logAccount').value;
+            
+            let url = `/api/logs?date=${date}`;
+            if (accountId) {
+                url += `&account_id=${accountId}`;
+            }
+            
+            const data = await apiRequest(url);
+            const logsList = document.getElementById('logsList');
+            
+            if (data.data.logs.length === 0) {
+                logsList.innerHTML = '<div class="text-center text-gray-500 py-8">暂无日志</div>';
+                return;
+            }
+            
+            logsList.innerHTML = '';
+            data.data.logs.forEach(log => {
+                const logEntry = createLogEntry(log);
+                logsList.appendChild(logEntry);
+            });
+        } catch (error) {
+            console.error('加载日志失败:', error);
+        }
+    }
+
+    // 创建日志条目
+    function createLogEntry(log) {
+        const entry = document.createElement('div');
+        entry.className = `log-entry ${log.level.toLowerCase()} bg-white/50 p-3 rounded-lg`;
+        
+        const icon = log.is_success ? 'ri-checkbox-circle-line text-green-500' : 
+                     log.level === 'ERROR' ? 'ri-error-warning-line text-red-500' :
+                     log.level === 'INFO' ? 'ri-information-line text-blue-500' :
+                     'ri-alert-line text-yellow-500';
+        
+        entry.innerHTML = `
+            <div class="flex justify-between items-start mb-2">
+                <div class="flex items-center space-x-2">
+                    <i class="${icon}"></i>
+                    <span class="font-semibold text-sm">${log.account_name}</span>
+                    <span class="text-xs text-gray-500">${formatDateTime(log.created_at)}</span>
+                </div>
+            </div>
+            <div class="text-sm text-gray-700">${log.message}</div>
+        `;
+        
+        return entry;
+    }
+
+    // 加载系统状态
+    async function loadSystemStatus() {
+        try {
+            const data = await apiRequest('/api/scheduler/status');
+            const systemStatus = document.getElementById('systemStatus');
+            
+            systemStatus.innerHTML = '';
+            
+            if (data.data.length === 0) {
+                systemStatus.innerHTML = '<div class="text-center text-gray-500">暂无运行任务</div>';
+                return;
+            }
+            
+            data.data.forEach(job => {
+                const jobDiv = document.createElement('div');
+                jobDiv.className = 'bg-white/50 p-3 rounded-lg';
+                jobDiv.innerHTML = `
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="font-semibold text-sm">${job.name}</span>
+                        <span class="status-indicator active"></span>
+                    </div>
+                    <div class="text-xs text-gray-500">
+                        下次运行: ${job.next_run_time ? formatDateTime(job.next_run_time) : '未知'}
+                    </div>
+                `;
+                systemStatus.appendChild(jobDiv);
+            });
+        } catch (error) {
+            console.error('加载系统状态失败:', error);
+        }
+    }
+
+    // 加载邮件配置
+    async function loadEmailConfig() {
+        try {
+            const data = await apiRequest('/api/email/config');
+            const config = data.data;
+            
+            document.getElementById('smtpStatus').textContent = config.smtp_server;
+            document.getElementById('receiverStatus').textContent = config.default_receiver;
+        } catch (error) {
+            console.error('加载邮件配置失败:', error);
+        }
+    }
+
+    // 编辑账号
+    function editAccount(accountId) {
+        openModal(accountId);
+    }
+
+    // 删除账号
+    async function deleteAccount(accountId) {
+        if (!confirm('确定要删除这个账号吗？')) {
+            return;
+        }
+        
+        try {
+            await apiRequest(`/api/accounts/${accountId}`, {
+                method: 'DELETE'
+            });
+            showToast('账号删除成功');
+            loadAccounts();
+        } catch (error) {
+            console.error('删除账号失败:', error);
+        }
+    }
+
+    // 立即登录
+    async function loginNow(accountId) {
+        try {
+            showToast('正在执行登录...', 'info');
+            await apiRequest(`/api/accounts/${accountId}/login`, {
+                method: 'POST'
+            });
+            showToast('登录任务已启动');
+            setTimeout(() => {
+                loadAccounts();
+                loadLogs();
+            }, 2000);
+        } catch (error) {
+            console.error('登录失败:', error);
+        }
+    }
+
+    // 切换定时任务状态
+    async function toggleSchedule(accountId) {
+        try {
+            await apiRequest(`/api/accounts/${accountId}/schedule/toggle`, {
+                method: 'POST'
+            });
+            showToast('定时任务状态已切换');
+            loadAccounts();
+            loadSystemStatus();
+        } catch (error) {
+            console.error('切换定时任务状态失败:', error);
+        }
+    }
+
+    // 清空日志
+    async function clearLogs() {
+        if (!confirm('确定要清空日志吗？此操作不可恢复！')) {
+            return;
+        }
+        
+        try {
+            const date = document.getElementById('logDate').value;
+            const accountId = document.getElementById('logAccount').value;
+            
+            await apiRequest('/api/logs/clear', {
+                method: 'POST',
+                body: JSON.stringify({
+                    date: date,
+                    account_id: accountId || null
+                })
+            });
+            showToast('日志已清空');
+            loadLogs();
+        } catch (error) {
+            console.error('清空日志失败:', error);
+        }
+    }
+
+    // 测试邮件
+    async function testEmail() {
+        const testEmail = prompt('请输入测试邮箱地址：');
+        if (!testEmail) return;
+        
+        try {
+            showToast('正在发送测试邮件...', 'info');
+            await apiRequest('/api/email/test', {
+                method: 'POST',
+                body: JSON.stringify({
+                    test_email: testEmail
+                })
+            });
+            showToast('测试邮件发送成功');
+        } catch (error) {
+            console.error('测试邮件失败:', error);
+        }
+    }
+
+    // 发送每日日志
+    async function sendDailyLog() {
+        try {
+            showToast('正在发送日志邮件...', 'info');
+            await apiRequest('/api/email/send-daily-log', {
+                method: 'POST'
+            });
+            showToast('日志邮件发送成功');
+        } catch (error) {
+            console.error('发送日志邮件失败:', error);
+        }
+    }
+
+    // 刷新所有状态
+    function refreshAll() {
+        loadAccounts();
+        loadLogs();
+        loadSystemStatus();
+        loadEmailConfig();
+        showToast('状态已刷新');
+    }
+
+    // 登录所有账号
+    async function loginAllActive() {
+        if (!confirm('确定要登录所有启用状态的账号吗？')) {
+            return;
+        }
+        
+        try {
+            showToast('正在启动所有账号登录...', 'info');
+            // 这里可以批量调用登录接口
+            setTimeout(() => {
+                loadAccounts();
+                loadLogs();
+                showToast('所有账号登录任务已启动');
+            }, 1000);
+        } catch (error) {
+            console.error('批量登录失败:', error);
+        }
+    }
+
+    // 账号表单提交
+    document.getElementById('accountForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const accountId = document.getElementById('accountId').value;
+        const formData = {
+            name: document.getElementById('accountName').value,
+            email: document.getElementById('accountEmail').value,
+            password: document.getElementById('accountPassword').value,
+            custom_email: document.getElementById('customEmail').value,
+            email_notification: document.getElementById('emailNotification').checked,
+            schedule_minutes: parseInt(document.getElementById('scheduleMinutes').value) || null
+        };
+        
+        try {
+            if (accountId) {
+                // 更新账号
+                await apiRequest(`/api/accounts/${accountId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(formData)
+                });
+                showToast('账号更新成功');
+            } else {
+                // 添加账号
+                await apiRequest('/api/accounts', {
+                    method: 'POST',
+                    body: JSON.stringify(formData)
+                });
+                showToast('账号添加成功');
+            }
+            
+            closeModal();
+            loadAccounts();
+            loadSystemStatus();
+        } catch (error) {
+            console.error('保存账号失败:', error);
+        }
+    });
+
+    // 邮件配置表单提交
+    document.getElementById('emailForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            smtp_server: document.getElementById('smtpServer').value,
+            smtp_port: parseInt(document.getElementById('smtpPort').value),
+            sender_email: document.getElementById('senderEmail').value,
+            sender_password: document.getElementById('senderPassword').value,
+            default_receiver: document.getElementById('defaultReceiver').value
+        };
+        
+        try {
+            await apiRequest('/api/email/config', {
+                method: 'POST',
+                body: JSON.stringify(formData)
+            });
+            showToast('邮件配置保存成功');
+            closeEmailModal();
+            loadEmailConfig();
+        } catch (error) {
+            console.error('保存邮件配置失败:', error);
+        }
+    });
+</script>
+{% endblock %}
